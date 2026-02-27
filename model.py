@@ -347,12 +347,31 @@ class AttentionBlock(nn.Module):
                 start_idx = max(0, i - self.sliding_window + 1)
                 mask[i, :start_idx] = float('-inf')
         
-        attn_output = F.scaled_dot_product_attention(
-            q, k, v,
-            attn_mask=mask,
-            dropout_p=self.dropout if self.training else 0.0,
-            is_causal=is_causal and mask is None
-        )
+        logit_cap = self.model_config.logit_cap
+        if logit_cap > 0:
+            # Manual attention path so we can apply soft logit capping before softmax.
+            # Used in Gemma / Gemma 3: score = logit_cap * tanh(score / logit_cap)
+            scale = self.d_k ** -0.5
+            attn_scores = torch.matmul(q.float(), k.float().transpose(-2, -1)) * scale
+            attn_scores = logit_cap * torch.tanh(attn_scores / logit_cap)
+            if mask is not None:
+                attn_scores = attn_scores + mask.float()
+            elif is_causal:
+                causal_mask = torch.triu(
+                    torch.full((seq_len_q, seq_len_k), float('-inf'), device=q.device), diagonal=1
+                )
+                attn_scores = attn_scores + causal_mask
+            attn_weights = F.softmax(attn_scores, dim=-1).to(q.dtype)
+            if self.training and self.dropout > 0.0:
+                attn_weights = F.dropout(attn_weights, p=self.dropout)
+            attn_output = torch.matmul(attn_weights, v)
+        else:
+            attn_output = F.scaled_dot_product_attention(
+                q, k, v,
+                attn_mask=mask,
+                dropout_p=self.dropout if self.training else 0.0,
+                is_causal=is_causal and mask is None
+            )
         
         attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len_q, -1)
         return self.wo(attn_output)
