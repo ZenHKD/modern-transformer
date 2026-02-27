@@ -1,0 +1,345 @@
+Modern Transformer Model Summary
+================================================================================
+
+Configuration:
+  d_model: 2304
+  n_layers: 20
+  n_heads: 16
+  n_kv_heads: 4
+  d_ff: 8192
+  max_seq_len: 4096
+  sliding_window: None
+  dropout: 0.1
+  drop_path: 0.0
+  init_std: 0.02
+  use_bias: False
+  num_experts: 1
+  top_k: 1
+  capacity_factor: 1.2
+  num_shared_experts: 0
+  aux_loss_coef: 0.01
+  router_z_loss_coef: 0.001
+  noise_std: 0.1
+
+================================================================================
+
+  architecture: encoder_only
+  vocab_size: 128256
+  weight_tying: False
+  apply_rope: True
+  rope_theta: 10000.0
+  rope_fraction: 1.0
+  rope_scaling: None
+  rope_in_cross_attn: False
+  qk_norm: True
+  logit_cap: 30.0
+  cache_mode: static
+  num_sink_tokens: 4
+  use_gradient_checkpointing: True
+  use_bf16: True
+  encoder: BlockConfig(d_model=2304, n_layers=20, n_heads=16, n_kv_heads=4, d_ff=8192, max_seq_len=4096, sliding_window=None, dropout=0.1, drop_path=0.0, init_std=0.02, use_bias=False, num_experts=1, top_k=1, capacity_factor=1.2, num_shared_experts=0, aux_loss_coef=0.01, router_z_loss_coef=0.001, noise_std=0.1)
+  decoder: None
+
+================================================================================
+
+Architecture:
+--------------------------------------------------------------------------------
+TransformerModel(
+  (embed_tokens): Embedding(128256, 2304)
+  (encoder): TransformerEncoder(
+    (embed_tokens): Embedding(128256, 2304)
+    (layers): ModuleList(
+      (0-19): 20 x EncoderBlock(
+        (attention): AttentionBlock(
+          (wq): Linear(in_features=2304, out_features=2304, bias=False)
+          (wk): Linear(in_features=2304, out_features=576, bias=False)
+          (wv): Linear(in_features=2304, out_features=576, bias=False)
+          (wo): Linear(in_features=2304, out_features=2304, bias=False)
+          (q_norm): RMSNorm()
+          (k_norm): RMSNorm()
+          (rope): RotaryPositionalEmbedding()
+        )
+        (attention_norm): RMSNorm()
+        (feed_forward): ExpertChoiceMoE(
+          (gate): Linear(in_features=2304, out_features=1, bias=False)
+          (experts): ModuleList(
+            (0): SwiGLU(
+              (w1): Linear(in_features=2304, out_features=8192, bias=False)
+              (w2): Linear(in_features=2304, out_features=8192, bias=False)
+              (w3): Linear(in_features=8192, out_features=2304, bias=False)
+              (dropout): Dropout(p=0.1, inplace=False)
+            )
+          )
+          (shared_experts): ModuleList()
+        )
+        (ffn_norm): RMSNorm()
+        (drop_path): Identity()
+      )
+    )
+    (norm): RMSNorm()
+  )
+  (head): Linear(in_features=2304, out_features=2, bias=True)
+)
+
+================================================================================
+
+Trainable Parameters per Layer:
+Layer Name                                                             |      Parameters
+------------------------------------------------------------------------------------------
+embed_tokens.weight                                                    |     295,501,824
+encoder.layers.0.attention.wq.weight                                   |       5,308,416
+encoder.layers.0.attention.wk.weight                                   |       1,327,104
+encoder.layers.0.attention.wv.weight                                   |       1,327,104
+encoder.layers.0.attention.wo.weight                                   |       5,308,416
+encoder.layers.0.attention.q_norm.weight                               |             144
+encoder.layers.0.attention.k_norm.weight                               |             144
+encoder.layers.0.attention_norm.weight                                 |           2,304
+encoder.layers.0.feed_forward.gate.weight                              |           2,304
+encoder.layers.0.feed_forward.experts.0.w1.weight                      |      18,874,368
+encoder.layers.0.feed_forward.experts.0.w2.weight                      |      18,874,368
+encoder.layers.0.feed_forward.experts.0.w3.weight                      |      18,874,368
+encoder.layers.0.ffn_norm.weight                                       |           2,304
+encoder.layers.1.attention.wq.weight                                   |       5,308,416
+encoder.layers.1.attention.wk.weight                                   |       1,327,104
+encoder.layers.1.attention.wv.weight                                   |       1,327,104
+encoder.layers.1.attention.wo.weight                                   |       5,308,416
+encoder.layers.1.attention.q_norm.weight                               |             144
+encoder.layers.1.attention.k_norm.weight                               |             144
+encoder.layers.1.attention_norm.weight                                 |           2,304
+encoder.layers.1.feed_forward.gate.weight                              |           2,304
+encoder.layers.1.feed_forward.experts.0.w1.weight                      |      18,874,368
+encoder.layers.1.feed_forward.experts.0.w2.weight                      |      18,874,368
+encoder.layers.1.feed_forward.experts.0.w3.weight                      |      18,874,368
+encoder.layers.1.ffn_norm.weight                                       |           2,304
+encoder.layers.2.attention.wq.weight                                   |       5,308,416
+encoder.layers.2.attention.wk.weight                                   |       1,327,104
+encoder.layers.2.attention.wv.weight                                   |       1,327,104
+encoder.layers.2.attention.wo.weight                                   |       5,308,416
+encoder.layers.2.attention.q_norm.weight                               |             144
+encoder.layers.2.attention.k_norm.weight                               |             144
+encoder.layers.2.attention_norm.weight                                 |           2,304
+encoder.layers.2.feed_forward.gate.weight                              |           2,304
+encoder.layers.2.feed_forward.experts.0.w1.weight                      |      18,874,368
+encoder.layers.2.feed_forward.experts.0.w2.weight                      |      18,874,368
+encoder.layers.2.feed_forward.experts.0.w3.weight                      |      18,874,368
+encoder.layers.2.ffn_norm.weight                                       |           2,304
+encoder.layers.3.attention.wq.weight                                   |       5,308,416
+encoder.layers.3.attention.wk.weight                                   |       1,327,104
+encoder.layers.3.attention.wv.weight                                   |       1,327,104
+encoder.layers.3.attention.wo.weight                                   |       5,308,416
+encoder.layers.3.attention.q_norm.weight                               |             144
+encoder.layers.3.attention.k_norm.weight                               |             144
+encoder.layers.3.attention_norm.weight                                 |           2,304
+encoder.layers.3.feed_forward.gate.weight                              |           2,304
+encoder.layers.3.feed_forward.experts.0.w1.weight                      |      18,874,368
+encoder.layers.3.feed_forward.experts.0.w2.weight                      |      18,874,368
+encoder.layers.3.feed_forward.experts.0.w3.weight                      |      18,874,368
+encoder.layers.3.ffn_norm.weight                                       |           2,304
+encoder.layers.4.attention.wq.weight                                   |       5,308,416
+encoder.layers.4.attention.wk.weight                                   |       1,327,104
+encoder.layers.4.attention.wv.weight                                   |       1,327,104
+encoder.layers.4.attention.wo.weight                                   |       5,308,416
+encoder.layers.4.attention.q_norm.weight                               |             144
+encoder.layers.4.attention.k_norm.weight                               |             144
+encoder.layers.4.attention_norm.weight                                 |           2,304
+encoder.layers.4.feed_forward.gate.weight                              |           2,304
+encoder.layers.4.feed_forward.experts.0.w1.weight                      |      18,874,368
+encoder.layers.4.feed_forward.experts.0.w2.weight                      |      18,874,368
+encoder.layers.4.feed_forward.experts.0.w3.weight                      |      18,874,368
+encoder.layers.4.ffn_norm.weight                                       |           2,304
+encoder.layers.5.attention.wq.weight                                   |       5,308,416
+encoder.layers.5.attention.wk.weight                                   |       1,327,104
+encoder.layers.5.attention.wv.weight                                   |       1,327,104
+encoder.layers.5.attention.wo.weight                                   |       5,308,416
+encoder.layers.5.attention.q_norm.weight                               |             144
+encoder.layers.5.attention.k_norm.weight                               |             144
+encoder.layers.5.attention_norm.weight                                 |           2,304
+encoder.layers.5.feed_forward.gate.weight                              |           2,304
+encoder.layers.5.feed_forward.experts.0.w1.weight                      |      18,874,368
+encoder.layers.5.feed_forward.experts.0.w2.weight                      |      18,874,368
+encoder.layers.5.feed_forward.experts.0.w3.weight                      |      18,874,368
+encoder.layers.5.ffn_norm.weight                                       |           2,304
+encoder.layers.6.attention.wq.weight                                   |       5,308,416
+encoder.layers.6.attention.wk.weight                                   |       1,327,104
+encoder.layers.6.attention.wv.weight                                   |       1,327,104
+encoder.layers.6.attention.wo.weight                                   |       5,308,416
+encoder.layers.6.attention.q_norm.weight                               |             144
+encoder.layers.6.attention.k_norm.weight                               |             144
+encoder.layers.6.attention_norm.weight                                 |           2,304
+encoder.layers.6.feed_forward.gate.weight                              |           2,304
+encoder.layers.6.feed_forward.experts.0.w1.weight                      |      18,874,368
+encoder.layers.6.feed_forward.experts.0.w2.weight                      |      18,874,368
+encoder.layers.6.feed_forward.experts.0.w3.weight                      |      18,874,368
+encoder.layers.6.ffn_norm.weight                                       |           2,304
+encoder.layers.7.attention.wq.weight                                   |       5,308,416
+encoder.layers.7.attention.wk.weight                                   |       1,327,104
+encoder.layers.7.attention.wv.weight                                   |       1,327,104
+encoder.layers.7.attention.wo.weight                                   |       5,308,416
+encoder.layers.7.attention.q_norm.weight                               |             144
+encoder.layers.7.attention.k_norm.weight                               |             144
+encoder.layers.7.attention_norm.weight                                 |           2,304
+encoder.layers.7.feed_forward.gate.weight                              |           2,304
+encoder.layers.7.feed_forward.experts.0.w1.weight                      |      18,874,368
+encoder.layers.7.feed_forward.experts.0.w2.weight                      |      18,874,368
+encoder.layers.7.feed_forward.experts.0.w3.weight                      |      18,874,368
+encoder.layers.7.ffn_norm.weight                                       |           2,304
+encoder.layers.8.attention.wq.weight                                   |       5,308,416
+encoder.layers.8.attention.wk.weight                                   |       1,327,104
+encoder.layers.8.attention.wv.weight                                   |       1,327,104
+encoder.layers.8.attention.wo.weight                                   |       5,308,416
+encoder.layers.8.attention.q_norm.weight                               |             144
+encoder.layers.8.attention.k_norm.weight                               |             144
+encoder.layers.8.attention_norm.weight                                 |           2,304
+encoder.layers.8.feed_forward.gate.weight                              |           2,304
+encoder.layers.8.feed_forward.experts.0.w1.weight                      |      18,874,368
+encoder.layers.8.feed_forward.experts.0.w2.weight                      |      18,874,368
+encoder.layers.8.feed_forward.experts.0.w3.weight                      |      18,874,368
+encoder.layers.8.ffn_norm.weight                                       |           2,304
+encoder.layers.9.attention.wq.weight                                   |       5,308,416
+encoder.layers.9.attention.wk.weight                                   |       1,327,104
+encoder.layers.9.attention.wv.weight                                   |       1,327,104
+encoder.layers.9.attention.wo.weight                                   |       5,308,416
+encoder.layers.9.attention.q_norm.weight                               |             144
+encoder.layers.9.attention.k_norm.weight                               |             144
+encoder.layers.9.attention_norm.weight                                 |           2,304
+encoder.layers.9.feed_forward.gate.weight                              |           2,304
+encoder.layers.9.feed_forward.experts.0.w1.weight                      |      18,874,368
+encoder.layers.9.feed_forward.experts.0.w2.weight                      |      18,874,368
+encoder.layers.9.feed_forward.experts.0.w3.weight                      |      18,874,368
+encoder.layers.9.ffn_norm.weight                                       |           2,304
+encoder.layers.10.attention.wq.weight                                  |       5,308,416
+encoder.layers.10.attention.wk.weight                                  |       1,327,104
+encoder.layers.10.attention.wv.weight                                  |       1,327,104
+encoder.layers.10.attention.wo.weight                                  |       5,308,416
+encoder.layers.10.attention.q_norm.weight                              |             144
+encoder.layers.10.attention.k_norm.weight                              |             144
+encoder.layers.10.attention_norm.weight                                |           2,304
+encoder.layers.10.feed_forward.gate.weight                             |           2,304
+encoder.layers.10.feed_forward.experts.0.w1.weight                     |      18,874,368
+encoder.layers.10.feed_forward.experts.0.w2.weight                     |      18,874,368
+encoder.layers.10.feed_forward.experts.0.w3.weight                     |      18,874,368
+encoder.layers.10.ffn_norm.weight                                      |           2,304
+encoder.layers.11.attention.wq.weight                                  |       5,308,416
+encoder.layers.11.attention.wk.weight                                  |       1,327,104
+encoder.layers.11.attention.wv.weight                                  |       1,327,104
+encoder.layers.11.attention.wo.weight                                  |       5,308,416
+encoder.layers.11.attention.q_norm.weight                              |             144
+encoder.layers.11.attention.k_norm.weight                              |             144
+encoder.layers.11.attention_norm.weight                                |           2,304
+encoder.layers.11.feed_forward.gate.weight                             |           2,304
+encoder.layers.11.feed_forward.experts.0.w1.weight                     |      18,874,368
+encoder.layers.11.feed_forward.experts.0.w2.weight                     |      18,874,368
+encoder.layers.11.feed_forward.experts.0.w3.weight                     |      18,874,368
+encoder.layers.11.ffn_norm.weight                                      |           2,304
+encoder.layers.12.attention.wq.weight                                  |       5,308,416
+encoder.layers.12.attention.wk.weight                                  |       1,327,104
+encoder.layers.12.attention.wv.weight                                  |       1,327,104
+encoder.layers.12.attention.wo.weight                                  |       5,308,416
+encoder.layers.12.attention.q_norm.weight                              |             144
+encoder.layers.12.attention.k_norm.weight                              |             144
+encoder.layers.12.attention_norm.weight                                |           2,304
+encoder.layers.12.feed_forward.gate.weight                             |           2,304
+encoder.layers.12.feed_forward.experts.0.w1.weight                     |      18,874,368
+encoder.layers.12.feed_forward.experts.0.w2.weight                     |      18,874,368
+encoder.layers.12.feed_forward.experts.0.w3.weight                     |      18,874,368
+encoder.layers.12.ffn_norm.weight                                      |           2,304
+encoder.layers.13.attention.wq.weight                                  |       5,308,416
+encoder.layers.13.attention.wk.weight                                  |       1,327,104
+encoder.layers.13.attention.wv.weight                                  |       1,327,104
+encoder.layers.13.attention.wo.weight                                  |       5,308,416
+encoder.layers.13.attention.q_norm.weight                              |             144
+encoder.layers.13.attention.k_norm.weight                              |             144
+encoder.layers.13.attention_norm.weight                                |           2,304
+encoder.layers.13.feed_forward.gate.weight                             |           2,304
+encoder.layers.13.feed_forward.experts.0.w1.weight                     |      18,874,368
+encoder.layers.13.feed_forward.experts.0.w2.weight                     |      18,874,368
+encoder.layers.13.feed_forward.experts.0.w3.weight                     |      18,874,368
+encoder.layers.13.ffn_norm.weight                                      |           2,304
+encoder.layers.14.attention.wq.weight                                  |       5,308,416
+encoder.layers.14.attention.wk.weight                                  |       1,327,104
+encoder.layers.14.attention.wv.weight                                  |       1,327,104
+encoder.layers.14.attention.wo.weight                                  |       5,308,416
+encoder.layers.14.attention.q_norm.weight                              |             144
+encoder.layers.14.attention.k_norm.weight                              |             144
+encoder.layers.14.attention_norm.weight                                |           2,304
+encoder.layers.14.feed_forward.gate.weight                             |           2,304
+encoder.layers.14.feed_forward.experts.0.w1.weight                     |      18,874,368
+encoder.layers.14.feed_forward.experts.0.w2.weight                     |      18,874,368
+encoder.layers.14.feed_forward.experts.0.w3.weight                     |      18,874,368
+encoder.layers.14.ffn_norm.weight                                      |           2,304
+encoder.layers.15.attention.wq.weight                                  |       5,308,416
+encoder.layers.15.attention.wk.weight                                  |       1,327,104
+encoder.layers.15.attention.wv.weight                                  |       1,327,104
+encoder.layers.15.attention.wo.weight                                  |       5,308,416
+encoder.layers.15.attention.q_norm.weight                              |             144
+encoder.layers.15.attention.k_norm.weight                              |             144
+encoder.layers.15.attention_norm.weight                                |           2,304
+encoder.layers.15.feed_forward.gate.weight                             |           2,304
+encoder.layers.15.feed_forward.experts.0.w1.weight                     |      18,874,368
+encoder.layers.15.feed_forward.experts.0.w2.weight                     |      18,874,368
+encoder.layers.15.feed_forward.experts.0.w3.weight                     |      18,874,368
+encoder.layers.15.ffn_norm.weight                                      |           2,304
+encoder.layers.16.attention.wq.weight                                  |       5,308,416
+encoder.layers.16.attention.wk.weight                                  |       1,327,104
+encoder.layers.16.attention.wv.weight                                  |       1,327,104
+encoder.layers.16.attention.wo.weight                                  |       5,308,416
+encoder.layers.16.attention.q_norm.weight                              |             144
+encoder.layers.16.attention.k_norm.weight                              |             144
+encoder.layers.16.attention_norm.weight                                |           2,304
+encoder.layers.16.feed_forward.gate.weight                             |           2,304
+encoder.layers.16.feed_forward.experts.0.w1.weight                     |      18,874,368
+encoder.layers.16.feed_forward.experts.0.w2.weight                     |      18,874,368
+encoder.layers.16.feed_forward.experts.0.w3.weight                     |      18,874,368
+encoder.layers.16.ffn_norm.weight                                      |           2,304
+encoder.layers.17.attention.wq.weight                                  |       5,308,416
+encoder.layers.17.attention.wk.weight                                  |       1,327,104
+encoder.layers.17.attention.wv.weight                                  |       1,327,104
+encoder.layers.17.attention.wo.weight                                  |       5,308,416
+encoder.layers.17.attention.q_norm.weight                              |             144
+encoder.layers.17.attention.k_norm.weight                              |             144
+encoder.layers.17.attention_norm.weight                                |           2,304
+encoder.layers.17.feed_forward.gate.weight                             |           2,304
+encoder.layers.17.feed_forward.experts.0.w1.weight                     |      18,874,368
+encoder.layers.17.feed_forward.experts.0.w2.weight                     |      18,874,368
+encoder.layers.17.feed_forward.experts.0.w3.weight                     |      18,874,368
+encoder.layers.17.ffn_norm.weight                                      |           2,304
+encoder.layers.18.attention.wq.weight                                  |       5,308,416
+encoder.layers.18.attention.wk.weight                                  |       1,327,104
+encoder.layers.18.attention.wv.weight                                  |       1,327,104
+encoder.layers.18.attention.wo.weight                                  |       5,308,416
+encoder.layers.18.attention.q_norm.weight                              |             144
+encoder.layers.18.attention.k_norm.weight                              |             144
+encoder.layers.18.attention_norm.weight                                |           2,304
+encoder.layers.18.feed_forward.gate.weight                             |           2,304
+encoder.layers.18.feed_forward.experts.0.w1.weight                     |      18,874,368
+encoder.layers.18.feed_forward.experts.0.w2.weight                     |      18,874,368
+encoder.layers.18.feed_forward.experts.0.w3.weight                     |      18,874,368
+encoder.layers.18.ffn_norm.weight                                      |           2,304
+encoder.layers.19.attention.wq.weight                                  |       5,308,416
+encoder.layers.19.attention.wk.weight                                  |       1,327,104
+encoder.layers.19.attention.wv.weight                                  |       1,327,104
+encoder.layers.19.attention.wo.weight                                  |       5,308,416
+encoder.layers.19.attention.q_norm.weight                              |             144
+encoder.layers.19.attention.k_norm.weight                              |             144
+encoder.layers.19.attention_norm.weight                                |           2,304
+encoder.layers.19.feed_forward.gate.weight                             |           2,304
+encoder.layers.19.feed_forward.experts.0.w1.weight                     |      18,874,368
+encoder.layers.19.feed_forward.experts.0.w2.weight                     |      18,874,368
+encoder.layers.19.feed_forward.experts.0.w3.weight                     |      18,874,368
+encoder.layers.19.ffn_norm.weight                                      |           2,304
+encoder.norm.weight                                                    |           2,304
+head.weight                                                            |           4,608
+head.bias                                                              |               2
+==========================================================================================
+
+Total trainable parameters: 1,693,535,618
+Total (millions): 1693.54M
+
+Memory Estimates (BF16=True):
+  - Weights Only:              3.15 GB
+  - Inference (bs=2, seq=128):  3.17 GB
+      └─ KV Cache:             0.01 GB
+  - Training (AdamW):          15.77 GB
+      └─ Persistent (w+g+m+v): 12.62 GB
+      └─ Activations (est.):   3.15 GB
+      Note: Activation memory is a rough lower bound. Real usage can be 2-4x higher

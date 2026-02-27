@@ -1,0 +1,52 @@
+# =============================================================================
+# Modern BERT Encoder-Only 
+# Approx: 1.7B parameters
+# =============================================================================
+
+# Global model settings
+architecture: "encoder_only"
+vocab_size: 128256
+weight_tying: false
+use_bf16: true
+use_gradient_checkpointing: true
+
+# Inference settings
+cache_mode: "static"
+num_sink_tokens: 4
+
+# RoPE positional encoding
+apply_rope: true
+rope_theta: 10000.0
+rope_fraction: 1.0
+rope_scaling: null
+rope_in_cross_attn: false
+
+# Attention enhancements
+qk_norm: true
+logit_cap: 30.0
+
+# Encoder block configuration
+encoder:
+  d_model: 2304
+  n_layers: 20
+  n_heads: 16
+  n_kv_heads: 4
+  d_ff: 8192
+
+  max_seq_len: 4096
+  sliding_window: null
+
+  dropout: 0.1
+  drop_path: 0.0
+  
+  init_std: 0.02
+  use_bias: false
+  
+  # Dense model
+  num_experts: 1
+  top_k: 1
+  capacity_factor: 1.2
+  num_shared_experts: 0
+  aux_loss_coef: 0.01
+  router_z_loss_coef: 0.001
+  noise_std: 0.1

@@ -1,0 +1,45 @@
+# =============================================================================
+# LLAMA 3 Small Encoder-Decoder
+# Approx: 2B parameters 
+# =============================================================================
+
+architecture: "encoder_decoder"
+vocab_size: 128256
+weight_tying: true
+use_bf16: true
+use_gradient_checkpointing: true
+
+encoder:
+  d_model: 2048
+  n_layers: 12
+  n_heads: 16
+  n_kv_heads: 4
+  d_ff: 5632
+  max_seq_len: 4096
+  dropout: 0.0
+  drop_path: 0.0
+  init_std: 0.02
+  use_bias: false
+  num_experts: 1  # Dense model
+  top_k: 1
+
+decoder:
+  d_model: 2048
+  n_layers: 12
+  n_heads: 16
+  n_kv_heads: 4
+  d_ff: 5632
+  max_seq_len: 4096
+  dropout: 0.0
+  drop_path: 0.0
+  init_std: 0.02
+  use_bias: false
+  num_experts: 1
+  top_k: 1
+
+# RoPE settings
+apply_rope: true
+rope_theta: 500000.0
+rope_scaling: null
+qk_norm: true
+logit_cap: 30.0

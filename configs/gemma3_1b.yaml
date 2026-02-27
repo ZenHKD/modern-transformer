@@ -1,0 +1,44 @@
+# =============================================================================
+# GEMMA 3 1B Decoder-Only
+# Approx: 1.29B parameters (dense model, 128K context)
+# =============================================================================
+
+# Global model settings
+architecture: "decoder_only"
+vocab_size: 256000
+weight_tying: true
+use_bf16: true
+use_gradient_checkpointing: true
+
+# Decoder block configuration
+decoder:
+  d_model: 1152
+  n_layers: 26
+  n_heads: 4
+  n_kv_heads: 4
+  d_ff: 11264
+
+  max_seq_len: 131072
+  sliding_window: null
+
+  dropout: 0.0
+  drop_path: 0.0
+
+  init_std: 0.02
+  use_bias: false
+  
+  num_experts: 1
+  top_k: 1
+  capacity_factor: 1.2
+  num_shared_experts: 0
+  aux_loss_coef: 0.01
+  router_z_loss_coef: 0.001
+  noise_std: 0.1
+
+# RoPE settings
+apply_rope: true
+rope_theta: 10000.0
+rope_fraction: 1.0
+rope_scaling: "ntk"
+qk_norm: true
+logit_cap: 30.0
