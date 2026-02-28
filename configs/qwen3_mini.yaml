@@ -1,0 +1,50 @@
+# =============================================================================
+# Qwen3-Coder-Next Mini — Hybrid Decoder-Only
+# Small config for testing: hybrid linear+softmax attention, token-choice MoE
+# Mirrors the Qwen3-Next architecture pattern (3:1 DeltaNet:softmax ratio)
+# =============================================================================
+
+architecture: "decoder_only"
+vocab_size: 32000
+weight_tying: true
+use_bf16: false              # use float32 for easy CPU testing
+use_gradient_checkpointing: false
+apply_rope: true
+rope_theta: 500000.0
+rope_fraction: 1.0
+rope_scaling: null
+qk_norm: true
+logit_cap: 30.0
+
+decoder:
+  d_model: 512
+  n_layers: 8
+  n_heads: 8
+  n_kv_heads: 2
+  d_ff: 1024
+  max_seq_len: 2048
+  sliding_window: null
+  dropout: 0.0
+  drop_path: 0.0
+  init_std: 0.02
+  use_bias: false
+
+  # Attention type: "hybrid" (3 DeltaNet : 1 softmax, like Qwen3-Next)
+  attention_type: "hybrid"
+  hybrid_ratio: 3
+
+  # GatedDeltaNet params
+  linear_n_heads: 8
+  linear_n_kv_heads: 4
+  linear_head_dim: 64
+  linear_conv_kernel: 4
+
+  # Token-choice MoE (Mixtral / Qwen3 style)
+  moe_routing: "token_choice"
+  num_experts: 4
+  top_k: 2
+  num_shared_experts: 1
+  capacity_factor: 1.25
+  aux_loss_coef: 0.01
+  router_z_loss_coef: 0.001
+  noise_std: 0.0

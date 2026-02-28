@@ -36,6 +36,20 @@ class BlockConfig:
     router_z_loss_coef: float = 0.001
     noise_std: float = 0.1
 
+    # Attention type: "softmax" | "linear" | "hybrid"
+    # "hybrid" interleaves linear:softmax at hybrid_ratio:1
+    attention_type: str = "softmax"
+    hybrid_ratio: int = 3  # N linear layers per 1 softmax layer
+
+    # GatedDeltaNet (linear attention) params
+    linear_n_heads: int = 16       # V heads
+    linear_n_kv_heads: int = 8     # QK heads
+    linear_head_dim: int = 128     # head dim for linear attn
+    linear_conv_kernel: int = 4    # short causal conv kernel on Q, K
+
+    # MoE routing: "token_choice" | "expert_choice"
+    moe_routing: str = "token_choice"
+
 @dataclass
 class ModelConfig:
     """Top level configuration for the entire model"""
@@ -391,132 +405,358 @@ class DropPath(nn.Module):
         random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
         random_tensor.floor_()
         return x.div(keep_prob) * random_tensor
-    
 
-class EncoderBlock(nn.Module):
-    """A Block of Encoder: Self-Attention -> FFN"""
+
+class TokenChoiceMoE(nn.Module):
+    """Token-Choice Top-K MoE routing with load balancing (Mixtral / Qwen3 style).
+    Each token independently selects its top-k experts via softmax gating.
+    """
     def __init__(self, block_config: BlockConfig, model_config: ModelConfig):
         super().__init__()
-        # 1. Self-Attention
-        self.attention = AttentionBlock(block_config, model_config, is_cross_attention=False)
+        self.num_experts = block_config.num_experts
+        self.top_k = block_config.top_k
+        self.aux_loss_coef = block_config.aux_loss_coef
+        self.z_loss_coef = block_config.router_z_loss_coef
+
+        self.gate = nn.Linear(block_config.d_model, block_config.num_experts, bias=False)
+        self.experts = nn.ModuleList([
+            SwiGLU(block_config.d_model, block_config.d_ff, block_config.dropout, block_config.use_bias)
+            for _ in range(block_config.num_experts)
+        ])
+        self.shared_experts = nn.ModuleList([
+            SwiGLU(block_config.d_model, block_config.d_ff // 2, block_config.dropout, block_config.use_bias)
+            for _ in range(block_config.num_shared_experts)
+        ])
+
+    def forward(self, x: torch.Tensor):
+        B, S, D = x.shape
+        x_flat = x.view(-1, D)  # (B*S, D)
+        num_tokens = x_flat.shape[0]
+
+        router_logits = self.gate(x_flat)  # (N, num_experts)
+
+        # Z-loss: penalizes large logit magnitudes for training stability
+        z_loss = self.z_loss_coef * (torch.logsumexp(router_logits, dim=-1) ** 2).mean()
+
+        scores = F.softmax(router_logits, dim=-1)  # (N, E)
+        top_k_scores, top_k_idx = torch.topk(scores, self.top_k, dim=-1)  # (N, k)
+
+        # Load balancing aux loss: f_i * P_i (Switch Transformer style)
+        # f_i = fraction of tokens routed to expert i
+        # P_i = mean router probability for expert i
+        tokens_per_expert = torch.zeros(self.num_experts, device=x.device)
+        tokens_per_expert.scatter_add_(0, top_k_idx.view(-1),
+                                       torch.ones(num_tokens * self.top_k, device=x.device))
+        f = tokens_per_expert / num_tokens              # (E,)
+        P = scores.mean(dim=0)                          # (E,)
+        aux_loss = self.aux_loss_coef * self.num_experts * (f * P).sum()
+        total_aux_loss = aux_loss + z_loss
+
+        # Dispatch: scatter tokens to experts, collect weighted outputs
+        output = torch.zeros_like(x_flat)
+        for expert_idx, expert in enumerate(self.experts):
+            # Find which tokens chose this expert and at which top-k slot
+            token_mask = (top_k_idx == expert_idx)          # (N, k)
+            token_indices = token_mask.any(dim=-1).nonzero(as_tuple=True)[0]  # (m,)
+            if token_indices.numel() == 0:
+                continue
+            # Get the weight for this expert for each selected token
+            slot = token_mask[token_indices].float().argmax(dim=-1)  # which k-slot
+            weights = top_k_scores[token_indices, slot].unsqueeze(-1)  # (m, 1)
+            expert_out = expert(x_flat[token_indices]) * weights        # (m, D)
+            output.index_add_(0, token_indices, expert_out)
+
+        # Shared experts see all tokens (always active)
+        for shared_expert in self.shared_experts:
+            output = output + shared_expert(x_flat)
+
+        return output.view(B, S, D), total_aux_loss
+
+
+class GatedDeltaNet(nn.Module):
+    """Gated DeltaNet: Linear O(N) attention based on the Delta Rule.
+
+    Architecture (Qwen3-Next style):
+      x -> Q, K projections with short causal conv
+        -> V projection
+        -> forget gate alpha (per-head scalar, sigmoid)
+        -> beta gate (learning rate, sigmoid + scale)
+        -> Delta Rule recurrence:
+             S_t = alpha_t * S_{t-1} + beta_t * (v_t - k_t^T @ S_{t-1}) outer k_t
+             o_t = q_t @ S_t
+        -> output gate: out = sigmoid(g) * o
+        -> W_o projection
+    """
+    def __init__(self, block_config: BlockConfig, model_config: ModelConfig):
+        super().__init__()
+        self.d_model = block_config.d_model
+        self.n_heads = block_config.linear_n_heads        # V heads
+        self.n_kv_heads = block_config.linear_n_kv_heads  # QK heads
+        self.head_dim = block_config.linear_head_dim
+        self.conv_kernel = block_config.linear_conv_kernel
+
+        d_qk = self.n_kv_heads * self.head_dim
+        d_v  = self.n_heads * self.head_dim
+
+        # QKV projections
+        self.wq = nn.Linear(block_config.d_model, d_qk, bias=False)
+        self.wk = nn.Linear(block_config.d_model, d_qk, bias=False)
+        self.wv = nn.Linear(block_config.d_model, d_v,  bias=False)
+        self.wo = nn.Linear(d_v, block_config.d_model, bias=False)
+
+        # Short causal depthwise conv applied to Q, K before recurrence
+        self.q_conv = nn.Conv1d(d_qk, d_qk, kernel_size=self.conv_kernel,
+                                padding=self.conv_kernel - 1, groups=d_qk, bias=False)
+        self.k_conv = nn.Conv1d(d_qk, d_qk, kernel_size=self.conv_kernel,
+                                padding=self.conv_kernel - 1, groups=d_qk, bias=False)
+
+        # Gates: one scalar per head
+        self.alpha_proj = nn.Linear(block_config.d_model, self.n_heads, bias=True)   # forget gate per V head
+        self.beta_proj  = nn.Linear(block_config.d_model, self.n_heads, bias=True)   # learning rate per V head
+        self.g_proj     = nn.Linear(block_config.d_model, d_v, bias=False)           # output gate
+
+        self.norm_q = RMSNorm(self.head_dim, elementwise_affine=True)
+        self.norm_k = RMSNorm(self.head_dim, elementwise_affine=True)
+
+    def forward(self, x: torch.Tensor, mask=None, cache=None, start_pos: int = 0):
+        """x: (B, S, D)"""
+        B, S, D = x.shape
+        d_qk = self.n_kv_heads * self.head_dim
+        d_v  = self.n_heads * self.head_dim
+
+        # --- Projections ---
+        Q = self.wq(x)  # (B, S, d_qk)
+        K = self.wk(x)
+        V = self.wv(x)  # (B, S, d_v)
+
+        # --- Short causal conv on Q, K (transpose to B, C, S for Conv1d) ---
+        Q = self.q_conv(Q.transpose(1, 2))[:, :, :S].transpose(1, 2)  # causal: slice
+        K = self.k_conv(K.transpose(1, 2))[:, :, :S].transpose(1, 2)
+
+        # --- Reshape to heads ---
+        # Q, K: (B, S, n_kv_heads, head_dim)
+        Q = Q.view(B, S, self.n_kv_heads, self.head_dim)
+        K = K.view(B, S, self.n_kv_heads, self.head_dim)
+        # V: (B, S, n_heads, head_dim)
+        V = V.view(B, S, self.n_heads, self.head_dim)
+
+        # Normalize keys for stable recurrence
+        Q = self.norm_q(Q)
+        K = self.norm_k(K)
+
+        # --- Gates ---
+        alpha = torch.sigmoid(self.alpha_proj(x))  # (B, S, n_heads)  forget gate [0,1]
+        beta  = torch.sigmoid(self.beta_proj(x)) / (self.head_dim ** 0.5)  # (B, S, n_heads)
+
+        # --- Delta Rule recurrence ---
+        # Repeat QK heads to match V heads if needed
+        repeat = self.n_heads // self.n_kv_heads
+        if repeat > 1:
+            Q = Q.repeat_interleave(repeat, dim=2)  # (B, S, n_heads, head_dim)
+            K = K.repeat_interleave(repeat, dim=2)
+
+        # State S: (B, n_heads, head_dim_k, head_dim_v)
+        S_state = torch.zeros(B, self.n_heads, self.head_dim, self.head_dim,
+                              device=x.device, dtype=x.dtype)
+        outputs = []
+        for t in range(S):
+            q_t = Q[:, t, :, :]   # (B, n_heads, head_dim)
+            k_t = K[:, t, :, :]
+            v_t = V[:, t, :, :]
+            a_t = alpha[:, t, :]   # (B, n_heads)
+            b_t = beta[:, t, :]
+
+            # Prediction from current state: (B, n_heads, head_dim)
+            pred = torch.einsum('bhd,bhdv->bhv', k_t, S_state)
+            # Delta: prediction error
+            delta = v_t - pred     # (B, n_heads, head_dim)
+            # State update: S = alpha * S + beta * delta outer k
+            update = torch.einsum('bhv,bhd->bhdv', delta, k_t)  # (B, n_heads, d, d)
+            S_state = (a_t[:, :, None, None] * S_state
+                       + b_t[:, :, None, None] * update)
+            # Output
+            o_t = torch.einsum('bhd,bhdv->bhv', q_t, S_state)  # (B, n_heads, head_dim)
+            outputs.append(o_t.unsqueeze(1))
+
+        out = torch.cat(outputs, dim=1)  # (B, S, n_heads, head_dim)
+        out = out.view(B, S, d_v)
+
+        # Output gate
+        g = torch.sigmoid(self.g_proj(x))
+        out = g * out
+
+        return self.wo(out)
+
+
+class EncoderBlock(nn.Module):
+    """A Block of Encoder: (Self-Attention | GatedDeltaNet) -> FFN"""
+    def __init__(self, block_config: BlockConfig, model_config: ModelConfig,
+                 layer_type: str = "softmax"):
+        super().__init__()
+        self.layer_type = layer_type
+
+        # 1. Self-Attention or Linear Attention
+        if layer_type == "linear":
+            self.attention = GatedDeltaNet(block_config, model_config)
+        else:
+            self.attention = AttentionBlock(block_config, model_config, is_cross_attention=False)
         self.attention_norm = RMSNorm(block_config.d_model, use_bias=block_config.use_bias)
 
-        # 2. Feed-Forward Network
-        self.feed_forward = ExpertChoiceMoE(block_config, model_config)
+        # 2. Feed-Forward Network (token-choice or expert-choice)
+        if block_config.moe_routing == "token_choice":
+            self.feed_forward = TokenChoiceMoE(block_config, model_config)
+        else:
+            self.feed_forward = ExpertChoiceMoE(block_config, model_config)
         self.ffn_norm = RMSNorm(block_config.d_model, use_bias=block_config.use_bias)
 
         self.drop_path = DropPath(block_config.drop_path) if block_config.drop_path > 0 else nn.Identity()
         self.use_checkpoint = model_config.use_gradient_checkpointing
 
     def forward(self, x, mask=None):
-        def attn_forward(x):
-            return self.attention(self.attention_norm(x), self.attention_norm(x), self.attention_norm(x), mask, None)
-        
+        normed = self.attention_norm(x)
+        if self.layer_type == "linear":
+            def attn_forward(x_):
+                return self.attention(self.attention_norm(x_))
+        else:
+            def attn_forward(x_):
+                n = self.attention_norm(x_)
+                return self.attention(n, n, n, mask, None)
+
         if self.use_checkpoint and self.training:
             attn_output = torch.utils.checkpoint.checkpoint(attn_forward, x, use_reentrant=False)
         else:
             attn_output = attn_forward(x)
-        
+
         x = x + self.drop_path(attn_output)
-        
-        def ffn_forward(x):
-            return self.feed_forward(self.ffn_norm(x))
-        
+
+        def ffn_forward(x_):
+            return self.feed_forward(self.ffn_norm(x_))
+
         if self.use_checkpoint and self.training:
             ffn_output, aux_loss = torch.utils.checkpoint.checkpoint(ffn_forward, x, use_reentrant=False)
         else:
             ffn_output, aux_loss = ffn_forward(x)
-        
+
         return x + self.drop_path(ffn_output), aux_loss
     
 
 class DecoderBlock(nn.Module):
     """
-    A Block of Decoder: Masked Self-Attention -> Cross-Attention -> FFN
+    A Block of Decoder: (Masked Self-Attention | GatedDeltaNet) -> Cross-Attention -> FFN
     """
-    def __init__(self, block_config: BlockConfig, model_config: ModelConfig, layer_idx: Optional[int] = None):
+    def __init__(self, block_config: BlockConfig, model_config: ModelConfig,
+                 layer_idx: Optional[int] = None, layer_type: str = "softmax"):
         super().__init__()
-        # 1. Masked Self-Attention
-        self.self_attention = AttentionBlock(block_config, model_config, is_cross_attention=False, layer_idx=layer_idx)
+        self.layer_type = layer_type
+
+        # 1. Masked Self-Attention or Linear Attention
+        if layer_type == "linear":
+            self.self_attention = GatedDeltaNet(block_config, model_config)
+        else:
+            self.self_attention = AttentionBlock(block_config, model_config,
+                                                 is_cross_attention=False, layer_idx=layer_idx)
         self.self_attention_norm = RMSNorm(block_config.d_model, use_bias=block_config.use_bias)
-        
-        # 2. Cross-Attention
+
+        # 2. Cross-Attention (always softmax; linear attn doesn't do cross-attn)
         self.cross_attention = AttentionBlock(block_config, model_config, is_cross_attention=True)
         self.cross_attention_norm = RMSNorm(block_config.d_model, use_bias=block_config.use_bias)
 
         # 3. Feed-Forward Network
-        self.feed_forward = ExpertChoiceMoE(block_config, model_config)
+        if block_config.moe_routing == "token_choice":
+            self.feed_forward = TokenChoiceMoE(block_config, model_config)
+        else:
+            self.feed_forward = ExpertChoiceMoE(block_config, model_config)
         self.ffn_norm = RMSNorm(block_config.d_model, use_bias=block_config.use_bias)
-        
+
         self.drop_path = DropPath(block_config.drop_path) if block_config.drop_path > 0 else nn.Identity()
         self.use_checkpoint = model_config.use_gradient_checkpointing
 
-    def forward(self, x, encoder_output=None, self_attn_mask=None, cross_attn_mask=None, cache: Optional[StaticCache] = None, start_pos: int = 0):
-        
+    def forward(self, x, encoder_output=None, self_attn_mask=None, cross_attn_mask=None,
+                cache: Optional[StaticCache] = None, start_pos: int = 0):
+
         # Self-attention
-        def self_attn_forward(x):
-            return self.self_attention(self.self_attention_norm(x), self.self_attention_norm(x), 
-                                     self.self_attention_norm(x), self_attn_mask, cache, start_pos)
-        
+        if self.layer_type == "linear":
+            def self_attn_forward(x_):
+                return self.self_attention(self.self_attention_norm(x_))
+        else:
+            def self_attn_forward(x_):
+                n = self.self_attention_norm(x_)
+                return self.self_attention(n, n, n, self_attn_mask, cache, start_pos)
+
         if self.use_checkpoint and self.training:
             attn_output = torch.utils.checkpoint.checkpoint(self_attn_forward, x, use_reentrant=False)
         else:
             attn_output = self_attn_forward(x)
-        
+
         x = x + self.drop_path(attn_output)
 
-        # Cross-attention
+        # Cross-attention (softmax only)
         if encoder_output is not None:
-            def cross_attn_forward(x, enc_out):
-                cross_cache = None
-                return self.cross_attention(self.cross_attention_norm(x), enc_out, enc_out, 
-                                           cross_attn_mask, cross_cache)
-            
+            def cross_attn_forward(x_, enc_out):
+                return self.cross_attention(self.cross_attention_norm(x_), enc_out, enc_out,
+                                            cross_attn_mask, None)
+
             if self.use_checkpoint and self.training:
                 cross_output = torch.utils.checkpoint.checkpoint(cross_attn_forward, x, encoder_output, use_reentrant=False)
             else:
                 cross_output = cross_attn_forward(x, encoder_output)
-
             x = x + self.drop_path(cross_output)
-        
+
         # FFN
-        def ffn_forward(x):
-            return self.feed_forward(self.ffn_norm(x))
-        
+        def ffn_forward(x_):
+            return self.feed_forward(self.ffn_norm(x_))
+
         if self.use_checkpoint and self.training:
             ffn_output, aux_loss = torch.utils.checkpoint.checkpoint(ffn_forward, x, use_reentrant=False)
         else:
             ffn_output, aux_loss = ffn_forward(x)
-        
+
         x = x + self.drop_path(ffn_output)
-        
         return x, aux_loss
     
+
+def _build_layer_types(block_config: BlockConfig, n_layers: int) -> list:
+    """Build a list of layer type strings based on attention_type setting."""
+    attn = block_config.attention_type
+    if attn == "softmax":
+        return ["softmax"] * n_layers
+    elif attn == "linear":
+        return ["linear"] * n_layers
+    elif attn == "hybrid":
+        # Pattern: ratio linear layers then 1 softmax, repeating
+        r = block_config.hybrid_ratio
+        pattern = ["linear"] * r + ["softmax"]
+        return [pattern[i % len(pattern)] for i in range(n_layers)]
+    else:
+        raise ValueError(f"Unknown attention_type: '{attn}'. Use 'softmax', 'linear', or 'hybrid'.")
+
 
 class TransformerEncoder(nn.Module):
     """Stack Blocks of Encoder. Input token IDs, Output: hidden states."""
     def __init__(self, block_config: BlockConfig, model_config: ModelConfig, embed_tokens: nn.Embedding):
         super().__init__()
         self.embed_tokens = embed_tokens
+        layer_types = _build_layer_types(block_config, block_config.n_layers)
         self.layers = nn.ModuleList([
-            EncoderBlock(block_config, model_config) for _ in range(block_config.n_layers)
+            EncoderBlock(block_config, model_config, layer_type=lt)
+            for lt in layer_types
         ])
         self.norm = RMSNorm(block_config.d_model, use_bias=block_config.use_bias)
-    
+
     def forward(self, input_ids, attention_mask=None):
         x = self.embed_tokens(input_ids)
         total_aux_loss = 0.0
-        
+
         # Encoder uses bidirectional mask
         mask = attention_mask
         if mask is not None:
             mask = mask.unsqueeze(1).unsqueeze(1).float()
             mask = mask.expand(-1, -1, mask.size(-1), -1)
-        
+
         for layer in self.layers:
             x, aux_loss = layer(x, mask=mask)
             total_aux_loss += aux_loss
-        
+
         return self.norm(x), total_aux_loss / len(self.layers)
     
 
@@ -526,43 +766,42 @@ class TransformerDecoder(nn.Module):
         super().__init__()
         self.block_config = block_config
         self.embed_tokens = embed_tokens
+        layer_types = _build_layer_types(block_config, block_config.n_layers)
         self.layers = nn.ModuleList([
-            DecoderBlock(block_config, model_config, layer_idx=i) for i in range(block_config.n_layers)
+            DecoderBlock(block_config, model_config, layer_idx=i, layer_type=lt)
+            for i, lt in enumerate(layer_types)
         ])
         self.norm = RMSNorm(block_config.d_model, use_bias=block_config.use_bias)
-        # KV Cache Manager would be managed by TransformerModel 
 
-    def forward(self, input_ids, encoder_output=None, attention_mask=None, cache: Optional[StaticCache] = None, start_pos: int = 0):
+    def forward(self, input_ids, encoder_output=None, attention_mask=None,
+                cache: Optional[StaticCache] = None, start_pos: int = 0):
         x = self.embed_tokens(input_ids)
         total_aux_loss = 0.0
-        
-        # Causal mask for self-attention
+
+        # Causal mask for softmax self-attention layers
         seq_len = input_ids.shape[1]
         if cache is not None:
-            causal_mask = None
             mask = None
         else:
             causal_mask = torch.triu(torch.full((seq_len, seq_len), float('-inf'), device=x.device), diagonal=1)
-
-            # Combine with padding mask if provided
             if attention_mask is not None:
                 mask = attention_mask.unsqueeze(1).unsqueeze(1).float()
                 mask = mask.expand(-1, -1, seq_len, -1)
                 mask = mask.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0) != 0, float('-inf'))
             else:
                 mask = causal_mask
-        
-        for layer in self.layers:            
+
+        for layer in self.layers:
             x, aux_loss = layer(
-                x, 
-                encoder_output=encoder_output, 
-                self_attn_mask=mask, 
+                x,
+                encoder_output=encoder_output,
+                self_attn_mask=mask,
                 cross_attn_mask=attention_mask,
                 cache=cache,
                 start_pos=start_pos
             )
             total_aux_loss += aux_loss
-        
+
         return self.norm(x), total_aux_loss / len(self.layers)
     
 
@@ -776,7 +1015,6 @@ def export_model_summary_to_file(config_path: str, batch_size: int = 1, seq_len:
 
 # --- Testing ---
 if __name__ == "__main__":
-    import sys # Add this line
 
     # Check if the user provided a config file path
     if len(sys.argv) < 2:

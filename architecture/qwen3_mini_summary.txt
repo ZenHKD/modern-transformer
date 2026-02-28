@@ -1,0 +1,550 @@
+Modern Transformer Model Summary
+================================================================================
+
+Configuration:
+  d_model: 512
+  n_layers: 8
+  n_heads: 8
+  n_kv_heads: 2
+  d_ff: 1024
+  max_seq_len: 2048
+  sliding_window: None
+  dropout: 0.0
+  drop_path: 0.0
+  init_std: 0.02
+  use_bias: False
+  num_experts: 4
+  top_k: 2
+  capacity_factor: 1.25
+  num_shared_experts: 1
+  aux_loss_coef: 0.01
+  router_z_loss_coef: 0.001
+  noise_std: 0.0
+  attention_type: hybrid
+  hybrid_ratio: 3
+  linear_n_heads: 8
+  linear_n_kv_heads: 4
+  linear_head_dim: 64
+  linear_conv_kernel: 4
+  moe_routing: token_choice
+
+================================================================================
+
+  architecture: decoder_only
+  vocab_size: 32000
+  weight_tying: True
+  apply_rope: True
+  rope_theta: 500000.0
+  rope_fraction: 1.0
+  rope_scaling: None
+  rope_in_cross_attn: False
+  qk_norm: True
+  logit_cap: 30.0
+  cache_mode: static
+  num_sink_tokens: 4
+  use_gradient_checkpointing: False
+  use_bf16: False
+  encoder: None
+  decoder: BlockConfig(d_model=512, n_layers=8, n_heads=8, n_kv_heads=2, d_ff=1024, max_seq_len=2048, sliding_window=None, dropout=0.0, drop_path=0.0, init_std=0.02, use_bias=False, num_experts=4, top_k=2, capacity_factor=1.25, num_shared_experts=1, aux_loss_coef=0.01, router_z_loss_coef=0.001, noise_std=0.0, attention_type='hybrid', hybrid_ratio=3, linear_n_heads=8, linear_n_kv_heads=4, linear_head_dim=64, linear_conv_kernel=4, moe_routing='token_choice')
+
+================================================================================
+
+Architecture:
+--------------------------------------------------------------------------------
+TransformerModel(
+  (embed_tokens): Embedding(32000, 512)
+  (decoder): TransformerDecoder(
+    (embed_tokens): Embedding(32000, 512)
+    (layers): ModuleList(
+      (0-2): 3 x DecoderBlock(
+        (self_attention): GatedDeltaNet(
+          (wq): Linear(in_features=512, out_features=256, bias=False)
+          (wk): Linear(in_features=512, out_features=256, bias=False)
+          (wv): Linear(in_features=512, out_features=512, bias=False)
+          (wo): Linear(in_features=512, out_features=512, bias=False)
+          (q_conv): Conv1d(256, 256, kernel_size=(4,), stride=(1,), padding=(3,), groups=256, bias=False)
+          (k_conv): Conv1d(256, 256, kernel_size=(4,), stride=(1,), padding=(3,), groups=256, bias=False)
+          (alpha_proj): Linear(in_features=512, out_features=8, bias=True)
+          (beta_proj): Linear(in_features=512, out_features=8, bias=True)
+          (g_proj): Linear(in_features=512, out_features=512, bias=False)
+          (norm_q): RMSNorm()
+          (norm_k): RMSNorm()
+        )
+        (self_attention_norm): RMSNorm()
+        (cross_attention): AttentionBlock(
+          (wq): Linear(in_features=512, out_features=512, bias=False)
+          (wk): Linear(in_features=512, out_features=128, bias=False)
+          (wv): Linear(in_features=512, out_features=128, bias=False)
+          (wo): Linear(in_features=512, out_features=512, bias=False)
+          (q_norm): RMSNorm()
+          (k_norm): RMSNorm()
+        )
+        (cross_attention_norm): RMSNorm()
+        (feed_forward): TokenChoiceMoE(
+          (gate): Linear(in_features=512, out_features=4, bias=False)
+          (experts): ModuleList(
+            (0-3): 4 x SwiGLU(
+              (w1): Linear(in_features=512, out_features=1024, bias=False)
+              (w2): Linear(in_features=512, out_features=1024, bias=False)
+              (w3): Linear(in_features=1024, out_features=512, bias=False)
+              (dropout): Dropout(p=0.0, inplace=False)
+            )
+          )
+          (shared_experts): ModuleList(
+            (0): SwiGLU(
+              (w1): Linear(in_features=512, out_features=512, bias=False)
+              (w2): Linear(in_features=512, out_features=512, bias=False)
+              (w3): Linear(in_features=512, out_features=512, bias=False)
+              (dropout): Dropout(p=0.0, inplace=False)
+            )
+          )
+        )
+        (ffn_norm): RMSNorm()
+        (drop_path): Identity()
+      )
+      (3): DecoderBlock(
+        (self_attention): AttentionBlock(
+          (wq): Linear(in_features=512, out_features=512, bias=False)
+          (wk): Linear(in_features=512, out_features=128, bias=False)
+          (wv): Linear(in_features=512, out_features=128, bias=False)
+          (wo): Linear(in_features=512, out_features=512, bias=False)
+          (q_norm): RMSNorm()
+          (k_norm): RMSNorm()
+          (rope): RotaryPositionalEmbedding()
+        )
+        (self_attention_norm): RMSNorm()
+        (cross_attention): AttentionBlock(
+          (wq): Linear(in_features=512, out_features=512, bias=False)
+          (wk): Linear(in_features=512, out_features=128, bias=False)
+          (wv): Linear(in_features=512, out_features=128, bias=False)
+          (wo): Linear(in_features=512, out_features=512, bias=False)
+          (q_norm): RMSNorm()
+          (k_norm): RMSNorm()
+        )
+        (cross_attention_norm): RMSNorm()
+        (feed_forward): TokenChoiceMoE(
+          (gate): Linear(in_features=512, out_features=4, bias=False)
+          (experts): ModuleList(
+            (0-3): 4 x SwiGLU(
+              (w1): Linear(in_features=512, out_features=1024, bias=False)
+              (w2): Linear(in_features=512, out_features=1024, bias=False)
+              (w3): Linear(in_features=1024, out_features=512, bias=False)
+              (dropout): Dropout(p=0.0, inplace=False)
+            )
+          )
+          (shared_experts): ModuleList(
+            (0): SwiGLU(
+              (w1): Linear(in_features=512, out_features=512, bias=False)
+              (w2): Linear(in_features=512, out_features=512, bias=False)
+              (w3): Linear(in_features=512, out_features=512, bias=False)
+              (dropout): Dropout(p=0.0, inplace=False)
+            )
+          )
+        )
+        (ffn_norm): RMSNorm()
+        (drop_path): Identity()
+      )
+      (4-6): 3 x DecoderBlock(
+        (self_attention): GatedDeltaNet(
+          (wq): Linear(in_features=512, out_features=256, bias=False)
+          (wk): Linear(in_features=512, out_features=256, bias=False)
+          (wv): Linear(in_features=512, out_features=512, bias=False)
+          (wo): Linear(in_features=512, out_features=512, bias=False)
+          (q_conv): Conv1d(256, 256, kernel_size=(4,), stride=(1,), padding=(3,), groups=256, bias=False)
+          (k_conv): Conv1d(256, 256, kernel_size=(4,), stride=(1,), padding=(3,), groups=256, bias=False)
+          (alpha_proj): Linear(in_features=512, out_features=8, bias=True)
+          (beta_proj): Linear(in_features=512, out_features=8, bias=True)
+          (g_proj): Linear(in_features=512, out_features=512, bias=False)
+          (norm_q): RMSNorm()
+          (norm_k): RMSNorm()
+        )
+        (self_attention_norm): RMSNorm()
+        (cross_attention): AttentionBlock(
+          (wq): Linear(in_features=512, out_features=512, bias=False)
+          (wk): Linear(in_features=512, out_features=128, bias=False)
+          (wv): Linear(in_features=512, out_features=128, bias=False)
+          (wo): Linear(in_features=512, out_features=512, bias=False)
+          (q_norm): RMSNorm()
+          (k_norm): RMSNorm()
+        )
+        (cross_attention_norm): RMSNorm()
+        (feed_forward): TokenChoiceMoE(
+          (gate): Linear(in_features=512, out_features=4, bias=False)
+          (experts): ModuleList(
+            (0-3): 4 x SwiGLU(
+              (w1): Linear(in_features=512, out_features=1024, bias=False)
+              (w2): Linear(in_features=512, out_features=1024, bias=False)
+              (w3): Linear(in_features=1024, out_features=512, bias=False)
+              (dropout): Dropout(p=0.0, inplace=False)
+            )
+          )
+          (shared_experts): ModuleList(
+            (0): SwiGLU(
+              (w1): Linear(in_features=512, out_features=512, bias=False)
+              (w2): Linear(in_features=512, out_features=512, bias=False)
+              (w3): Linear(in_features=512, out_features=512, bias=False)
+              (dropout): Dropout(p=0.0, inplace=False)
+            )
+          )
+        )
+        (ffn_norm): RMSNorm()
+        (drop_path): Identity()
+      )
+      (7): DecoderBlock(
+        (self_attention): AttentionBlock(
+          (wq): Linear(in_features=512, out_features=512, bias=False)
+          (wk): Linear(in_features=512, out_features=128, bias=False)
+          (wv): Linear(in_features=512, out_features=128, bias=False)
+          (wo): Linear(in_features=512, out_features=512, bias=False)
+          (q_norm): RMSNorm()
+          (k_norm): RMSNorm()
+          (rope): RotaryPositionalEmbedding()
+        )
+        (self_attention_norm): RMSNorm()
+        (cross_attention): AttentionBlock(
+          (wq): Linear(in_features=512, out_features=512, bias=False)
+          (wk): Linear(in_features=512, out_features=128, bias=False)
+          (wv): Linear(in_features=512, out_features=128, bias=False)
+          (wo): Linear(in_features=512, out_features=512, bias=False)
+          (q_norm): RMSNorm()
+          (k_norm): RMSNorm()
+        )
+        (cross_attention_norm): RMSNorm()
+        (feed_forward): TokenChoiceMoE(
+          (gate): Linear(in_features=512, out_features=4, bias=False)
+          (experts): ModuleList(
+            (0-3): 4 x SwiGLU(
+              (w1): Linear(in_features=512, out_features=1024, bias=False)
+              (w2): Linear(in_features=512, out_features=1024, bias=False)
+              (w3): Linear(in_features=1024, out_features=512, bias=False)
+              (dropout): Dropout(p=0.0, inplace=False)
+            )
+          )
+          (shared_experts): ModuleList(
+            (0): SwiGLU(
+              (w1): Linear(in_features=512, out_features=512, bias=False)
+              (w2): Linear(in_features=512, out_features=512, bias=False)
+              (w3): Linear(in_features=512, out_features=512, bias=False)
+              (dropout): Dropout(p=0.0, inplace=False)
+            )
+          )
+        )
+        (ffn_norm): RMSNorm()
+        (drop_path): Identity()
+      )
+    )
+    (norm): RMSNorm()
+  )
+  (head): Linear(in_features=512, out_features=32000, bias=False)
+)
+
+================================================================================
+
+Trainable Parameters per Layer:
+Layer Name                                                             |      Parameters
+------------------------------------------------------------------------------------------
+embed_tokens.weight                                                    |      16,384,000
+decoder.layers.0.self_attention.wq.weight                              |         131,072
+decoder.layers.0.self_attention.wk.weight                              |         131,072
+decoder.layers.0.self_attention.wv.weight                              |         262,144
+decoder.layers.0.self_attention.wo.weight                              |         262,144
+decoder.layers.0.self_attention.q_conv.weight                          |           1,024
+decoder.layers.0.self_attention.k_conv.weight                          |           1,024
+decoder.layers.0.self_attention.alpha_proj.weight                      |           4,096
+decoder.layers.0.self_attention.alpha_proj.bias                        |               8
+decoder.layers.0.self_attention.beta_proj.weight                       |           4,096
+decoder.layers.0.self_attention.beta_proj.bias                         |               8
+decoder.layers.0.self_attention.g_proj.weight                          |         262,144
+decoder.layers.0.self_attention.norm_q.weight                          |              64
+decoder.layers.0.self_attention.norm_k.weight                          |              64
+decoder.layers.0.self_attention_norm.weight                            |             512
+decoder.layers.0.cross_attention.wq.weight                             |         262,144
+decoder.layers.0.cross_attention.wk.weight                             |          65,536
+decoder.layers.0.cross_attention.wv.weight                             |          65,536
+decoder.layers.0.cross_attention.wo.weight                             |         262,144
+decoder.layers.0.cross_attention.q_norm.weight                         |              64
+decoder.layers.0.cross_attention.k_norm.weight                         |              64
+decoder.layers.0.cross_attention_norm.weight                           |             512
+decoder.layers.0.feed_forward.gate.weight                              |           2,048
+decoder.layers.0.feed_forward.experts.0.w1.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.0.w2.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.0.w3.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.1.w1.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.1.w2.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.1.w3.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.2.w1.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.2.w2.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.2.w3.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.3.w1.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.3.w2.weight                      |         524,288
+decoder.layers.0.feed_forward.experts.3.w3.weight                      |         524,288
+decoder.layers.0.feed_forward.shared_experts.0.w1.weight               |         262,144
+decoder.layers.0.feed_forward.shared_experts.0.w2.weight               |         262,144
+decoder.layers.0.feed_forward.shared_experts.0.w3.weight               |         262,144
+decoder.layers.0.ffn_norm.weight                                       |             512
+decoder.layers.1.self_attention.wq.weight                              |         131,072
+decoder.layers.1.self_attention.wk.weight                              |         131,072
+decoder.layers.1.self_attention.wv.weight                              |         262,144
+decoder.layers.1.self_attention.wo.weight                              |         262,144
+decoder.layers.1.self_attention.q_conv.weight                          |           1,024
+decoder.layers.1.self_attention.k_conv.weight                          |           1,024
+decoder.layers.1.self_attention.alpha_proj.weight                      |           4,096
+decoder.layers.1.self_attention.alpha_proj.bias                        |               8
+decoder.layers.1.self_attention.beta_proj.weight                       |           4,096
+decoder.layers.1.self_attention.beta_proj.bias                         |               8
+decoder.layers.1.self_attention.g_proj.weight                          |         262,144
+decoder.layers.1.self_attention.norm_q.weight                          |              64
+decoder.layers.1.self_attention.norm_k.weight                          |              64
+decoder.layers.1.self_attention_norm.weight                            |             512
+decoder.layers.1.cross_attention.wq.weight                             |         262,144
+decoder.layers.1.cross_attention.wk.weight                             |          65,536
+decoder.layers.1.cross_attention.wv.weight                             |          65,536
+decoder.layers.1.cross_attention.wo.weight                             |         262,144
+decoder.layers.1.cross_attention.q_norm.weight                         |              64
+decoder.layers.1.cross_attention.k_norm.weight                         |              64
+decoder.layers.1.cross_attention_norm.weight                           |             512
+decoder.layers.1.feed_forward.gate.weight                              |           2,048
+decoder.layers.1.feed_forward.experts.0.w1.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.0.w2.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.0.w3.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.1.w1.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.1.w2.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.1.w3.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.2.w1.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.2.w2.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.2.w3.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.3.w1.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.3.w2.weight                      |         524,288
+decoder.layers.1.feed_forward.experts.3.w3.weight                      |         524,288
+decoder.layers.1.feed_forward.shared_experts.0.w1.weight               |         262,144
+decoder.layers.1.feed_forward.shared_experts.0.w2.weight               |         262,144
+decoder.layers.1.feed_forward.shared_experts.0.w3.weight               |         262,144
+decoder.layers.1.ffn_norm.weight                                       |             512
+decoder.layers.2.self_attention.wq.weight                              |         131,072
+decoder.layers.2.self_attention.wk.weight                              |         131,072
+decoder.layers.2.self_attention.wv.weight                              |         262,144
+decoder.layers.2.self_attention.wo.weight                              |         262,144
+decoder.layers.2.self_attention.q_conv.weight                          |           1,024
+decoder.layers.2.self_attention.k_conv.weight                          |           1,024
+decoder.layers.2.self_attention.alpha_proj.weight                      |           4,096
+decoder.layers.2.self_attention.alpha_proj.bias                        |               8
+decoder.layers.2.self_attention.beta_proj.weight                       |           4,096
+decoder.layers.2.self_attention.beta_proj.bias                         |               8
+decoder.layers.2.self_attention.g_proj.weight                          |         262,144
+decoder.layers.2.self_attention.norm_q.weight                          |              64
+decoder.layers.2.self_attention.norm_k.weight                          |              64
+decoder.layers.2.self_attention_norm.weight                            |             512
+decoder.layers.2.cross_attention.wq.weight                             |         262,144
+decoder.layers.2.cross_attention.wk.weight                             |          65,536
+decoder.layers.2.cross_attention.wv.weight                             |          65,536
+decoder.layers.2.cross_attention.wo.weight                             |         262,144
+decoder.layers.2.cross_attention.q_norm.weight                         |              64
+decoder.layers.2.cross_attention.k_norm.weight                         |              64
+decoder.layers.2.cross_attention_norm.weight                           |             512
+decoder.layers.2.feed_forward.gate.weight                              |           2,048
+decoder.layers.2.feed_forward.experts.0.w1.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.0.w2.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.0.w3.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.1.w1.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.1.w2.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.1.w3.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.2.w1.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.2.w2.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.2.w3.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.3.w1.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.3.w2.weight                      |         524,288
+decoder.layers.2.feed_forward.experts.3.w3.weight                      |         524,288
+decoder.layers.2.feed_forward.shared_experts.0.w1.weight               |         262,144
+decoder.layers.2.feed_forward.shared_experts.0.w2.weight               |         262,144
+decoder.layers.2.feed_forward.shared_experts.0.w3.weight               |         262,144
+decoder.layers.2.ffn_norm.weight                                       |             512
+decoder.layers.3.self_attention.wq.weight                              |         262,144
+decoder.layers.3.self_attention.wk.weight                              |          65,536
+decoder.layers.3.self_attention.wv.weight                              |          65,536
+decoder.layers.3.self_attention.wo.weight                              |         262,144
+decoder.layers.3.self_attention.q_norm.weight                          |              64
+decoder.layers.3.self_attention.k_norm.weight                          |              64
+decoder.layers.3.self_attention_norm.weight                            |             512
+decoder.layers.3.cross_attention.wq.weight                             |         262,144
+decoder.layers.3.cross_attention.wk.weight                             |          65,536
+decoder.layers.3.cross_attention.wv.weight                             |          65,536
+decoder.layers.3.cross_attention.wo.weight                             |         262,144
+decoder.layers.3.cross_attention.q_norm.weight                         |              64
+decoder.layers.3.cross_attention.k_norm.weight                         |              64
+decoder.layers.3.cross_attention_norm.weight                           |             512
+decoder.layers.3.feed_forward.gate.weight                              |           2,048
+decoder.layers.3.feed_forward.experts.0.w1.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.0.w2.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.0.w3.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.1.w1.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.1.w2.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.1.w3.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.2.w1.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.2.w2.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.2.w3.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.3.w1.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.3.w2.weight                      |         524,288
+decoder.layers.3.feed_forward.experts.3.w3.weight                      |         524,288
+decoder.layers.3.feed_forward.shared_experts.0.w1.weight               |         262,144
+decoder.layers.3.feed_forward.shared_experts.0.w2.weight               |         262,144
+decoder.layers.3.feed_forward.shared_experts.0.w3.weight               |         262,144
+decoder.layers.3.ffn_norm.weight                                       |             512
+decoder.layers.4.self_attention.wq.weight                              |         131,072
+decoder.layers.4.self_attention.wk.weight                              |         131,072
+decoder.layers.4.self_attention.wv.weight                              |         262,144
+decoder.layers.4.self_attention.wo.weight                              |         262,144
+decoder.layers.4.self_attention.q_conv.weight                          |           1,024
+decoder.layers.4.self_attention.k_conv.weight                          |           1,024
+decoder.layers.4.self_attention.alpha_proj.weight                      |           4,096
+decoder.layers.4.self_attention.alpha_proj.bias                        |               8
+decoder.layers.4.self_attention.beta_proj.weight                       |           4,096
+decoder.layers.4.self_attention.beta_proj.bias                         |               8
+decoder.layers.4.self_attention.g_proj.weight                          |         262,144
+decoder.layers.4.self_attention.norm_q.weight                          |              64
+decoder.layers.4.self_attention.norm_k.weight                          |              64
+decoder.layers.4.self_attention_norm.weight                            |             512
+decoder.layers.4.cross_attention.wq.weight                             |         262,144
+decoder.layers.4.cross_attention.wk.weight                             |          65,536
+decoder.layers.4.cross_attention.wv.weight                             |          65,536
+decoder.layers.4.cross_attention.wo.weight                             |         262,144
+decoder.layers.4.cross_attention.q_norm.weight                         |              64
+decoder.layers.4.cross_attention.k_norm.weight                         |              64
+decoder.layers.4.cross_attention_norm.weight                           |             512
+decoder.layers.4.feed_forward.gate.weight                              |           2,048
+decoder.layers.4.feed_forward.experts.0.w1.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.0.w2.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.0.w3.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.1.w1.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.1.w2.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.1.w3.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.2.w1.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.2.w2.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.2.w3.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.3.w1.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.3.w2.weight                      |         524,288
+decoder.layers.4.feed_forward.experts.3.w3.weight                      |         524,288
+decoder.layers.4.feed_forward.shared_experts.0.w1.weight               |         262,144
+decoder.layers.4.feed_forward.shared_experts.0.w2.weight               |         262,144
+decoder.layers.4.feed_forward.shared_experts.0.w3.weight               |         262,144
+decoder.layers.4.ffn_norm.weight                                       |             512
+decoder.layers.5.self_attention.wq.weight                              |         131,072
+decoder.layers.5.self_attention.wk.weight                              |         131,072
+decoder.layers.5.self_attention.wv.weight                              |         262,144
+decoder.layers.5.self_attention.wo.weight                              |         262,144
+decoder.layers.5.self_attention.q_conv.weight                          |           1,024
+decoder.layers.5.self_attention.k_conv.weight                          |           1,024
+decoder.layers.5.self_attention.alpha_proj.weight                      |           4,096
+decoder.layers.5.self_attention.alpha_proj.bias                        |               8
+decoder.layers.5.self_attention.beta_proj.weight                       |           4,096
+decoder.layers.5.self_attention.beta_proj.bias                         |               8
+decoder.layers.5.self_attention.g_proj.weight                          |         262,144
+decoder.layers.5.self_attention.norm_q.weight                          |              64
+decoder.layers.5.self_attention.norm_k.weight                          |              64
+decoder.layers.5.self_attention_norm.weight                            |             512
+decoder.layers.5.cross_attention.wq.weight                             |         262,144
+decoder.layers.5.cross_attention.wk.weight                             |          65,536
+decoder.layers.5.cross_attention.wv.weight                             |          65,536
+decoder.layers.5.cross_attention.wo.weight                             |         262,144
+decoder.layers.5.cross_attention.q_norm.weight                         |              64
+decoder.layers.5.cross_attention.k_norm.weight                         |              64
+decoder.layers.5.cross_attention_norm.weight                           |             512
+decoder.layers.5.feed_forward.gate.weight                              |           2,048
+decoder.layers.5.feed_forward.experts.0.w1.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.0.w2.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.0.w3.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.1.w1.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.1.w2.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.1.w3.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.2.w1.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.2.w2.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.2.w3.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.3.w1.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.3.w2.weight                      |         524,288
+decoder.layers.5.feed_forward.experts.3.w3.weight                      |         524,288
+decoder.layers.5.feed_forward.shared_experts.0.w1.weight               |         262,144
+decoder.layers.5.feed_forward.shared_experts.0.w2.weight               |         262,144
+decoder.layers.5.feed_forward.shared_experts.0.w3.weight               |         262,144
+decoder.layers.5.ffn_norm.weight                                       |             512
+decoder.layers.6.self_attention.wq.weight                              |         131,072
+decoder.layers.6.self_attention.wk.weight                              |         131,072
+decoder.layers.6.self_attention.wv.weight                              |         262,144
+decoder.layers.6.self_attention.wo.weight                              |         262,144
+decoder.layers.6.self_attention.q_conv.weight                          |           1,024
+decoder.layers.6.self_attention.k_conv.weight                          |           1,024
+decoder.layers.6.self_attention.alpha_proj.weight                      |           4,096
+decoder.layers.6.self_attention.alpha_proj.bias                        |               8
+decoder.layers.6.self_attention.beta_proj.weight                       |           4,096
+decoder.layers.6.self_attention.beta_proj.bias                         |               8
+decoder.layers.6.self_attention.g_proj.weight                          |         262,144
+decoder.layers.6.self_attention.norm_q.weight                          |              64
+decoder.layers.6.self_attention.norm_k.weight                          |              64
+decoder.layers.6.self_attention_norm.weight                            |             512
+decoder.layers.6.cross_attention.wq.weight                             |         262,144
+decoder.layers.6.cross_attention.wk.weight                             |          65,536
+decoder.layers.6.cross_attention.wv.weight                             |          65,536
+decoder.layers.6.cross_attention.wo.weight                             |         262,144
+decoder.layers.6.cross_attention.q_norm.weight                         |              64
+decoder.layers.6.cross_attention.k_norm.weight                         |              64
+decoder.layers.6.cross_attention_norm.weight                           |             512
+decoder.layers.6.feed_forward.gate.weight                              |           2,048
+decoder.layers.6.feed_forward.experts.0.w1.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.0.w2.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.0.w3.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.1.w1.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.1.w2.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.1.w3.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.2.w1.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.2.w2.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.2.w3.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.3.w1.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.3.w2.weight                      |         524,288
+decoder.layers.6.feed_forward.experts.3.w3.weight                      |         524,288
+decoder.layers.6.feed_forward.shared_experts.0.w1.weight               |         262,144
+decoder.layers.6.feed_forward.shared_experts.0.w2.weight               |         262,144
+decoder.layers.6.feed_forward.shared_experts.0.w3.weight               |         262,144
+decoder.layers.6.ffn_norm.weight                                       |             512
+decoder.layers.7.self_attention.wq.weight                              |         262,144
+decoder.layers.7.self_attention.wk.weight                              |          65,536
+decoder.layers.7.self_attention.wv.weight                              |          65,536
+decoder.layers.7.self_attention.wo.weight                              |         262,144
+decoder.layers.7.self_attention.q_norm.weight                          |              64
+decoder.layers.7.self_attention.k_norm.weight                          |              64
+decoder.layers.7.self_attention_norm.weight                            |             512
+decoder.layers.7.cross_attention.wq.weight                             |         262,144
+decoder.layers.7.cross_attention.wk.weight                             |          65,536
+decoder.layers.7.cross_attention.wv.weight                             |          65,536
+decoder.layers.7.cross_attention.wo.weight                             |         262,144
+decoder.layers.7.cross_attention.q_norm.weight                         |              64
+decoder.layers.7.cross_attention.k_norm.weight                         |              64
+decoder.layers.7.cross_attention_norm.weight                           |             512
+decoder.layers.7.feed_forward.gate.weight                              |           2,048
+decoder.layers.7.feed_forward.experts.0.w1.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.0.w2.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.0.w3.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.1.w1.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.1.w2.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.1.w3.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.2.w1.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.2.w2.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.2.w3.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.3.w1.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.3.w2.weight                      |         524,288
+decoder.layers.7.feed_forward.experts.3.w3.weight                      |         524,288
+decoder.layers.7.feed_forward.shared_experts.0.w1.weight               |         262,144
+decoder.layers.7.feed_forward.shared_experts.0.w2.weight               |         262,144
+decoder.layers.7.feed_forward.shared_experts.0.w3.weight               |         262,144
+decoder.layers.7.ffn_norm.weight                                       |             512
+decoder.norm.weight                                                    |             512
+==========================================================================================
+
+Total trainable parameters: 69,560,928
+Total (millions): 69.56M
+
+Memory Estimates (BF16=False):
+  - Weights Only:              0.26 GB
+  - Inference (bs=2, seq=128):  0.26 GB
+      └─ KV Cache:             0.00 GB
+  - Training (AdamW):          1.30 GB
+      └─ Persistent (w+g+m+v): 1.04 GB
+      └─ Activations (est.):   0.26 GB
+      Note: Activation memory is a rough lower bound. Real usage can be 2-4x higher
